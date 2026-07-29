@@ -85,9 +85,15 @@ def get_movie(movie_id: int, session: Session = Depends(get_session)) -> MovieDe
     summary="영화 삭제",
     description=(
         "영화를 삭제한다. 해당 영화의 리뷰도 외래 키의 `ON DELETE CASCADE`로 "
-        "함께 삭제되며 되돌릴 수 없다."
+        "함께 삭제되며 되돌릴 수 없다.\n\n"
+        "공개 배포본은 시드 데이터(`is_seed=true`)의 삭제를 403으로 막는다. "
+        "누구나 접근할 수 있는 데모에서 시연용 데이터가 지워지는 것을 방지하기 위해서다. "
+        "직접 등록한 영화는 제한 없이 삭제된다."
     ),
-    responses={404: {"model": ErrorResponse, "description": "존재하지 않는 영화"}},
+    responses={
+        403: {"model": ErrorResponse, "description": "보호된 시드 데이터"},
+        404: {"model": ErrorResponse, "description": "존재하지 않는 영화"},
+    },
 )
 def delete_movie(movie_id: int, session: Session = Depends(get_session)) -> Response:
     try:
@@ -96,6 +102,11 @@ def delete_movie(movie_id: int, session: Session = Depends(get_session)) -> Resp
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"영화를 찾을 수 없습니다: id={movie_id}",
+        ) from exc
+    except movie_service.SeedProtectedError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="데모 시드 데이터는 삭제할 수 없습니다. 직접 등록한 영화만 삭제됩니다.",
         ) from exc
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 

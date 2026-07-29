@@ -76,7 +76,7 @@ def render_movie_detail(movie_id: int) -> None:
     st.divider()
     _render_reviews(movie_id, movie["review_count"])
     st.divider()
-    _render_danger_zone(movie_id, movie["review_count"])
+    _render_danger_zone(movie_id, movie["review_count"], movie.get("deletable", True))
 
 
 def _render_reviews(movie_id: int, review_count: int) -> None:
@@ -109,8 +109,19 @@ def _render_reviews(movie_id: int, review_count: int) -> None:
     components.paginate(total, REVIEW_PAGE_SIZE, state_key)
 
 
-def _render_danger_zone(movie_id: int, review_count: int) -> None:
+def _render_danger_zone(movie_id: int, review_count: int, deletable: bool) -> None:
     st.markdown("#### ⚠ 위험 구역")
+
+    # 삭제 가능 여부는 백엔드가 판단해 내려준다. 화면이 스스로 정하지 않는다
+    if not deletable:
+        st.info(
+            "이 영화는 **데모 시드 데이터**라 공개 배포본에서 삭제할 수 없습니다.\n\n"
+            "삭제 기능은 직접 등록한 영화에서 확인할 수 있습니다. "
+            "로컬 실행에서는 제한이 없습니다."
+        )
+        st.button("영화 삭제", disabled=True, type="secondary")
+        return
+
     st.caption(f"이 영화를 삭제하면 리뷰 {review_count}건도 함께 삭제됩니다. 되돌릴 수 없습니다.")
 
     confirmed = st.checkbox("위 내용을 이해했습니다.", key=f"confirm_delete_{movie_id}")

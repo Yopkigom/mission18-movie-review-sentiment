@@ -56,3 +56,18 @@ def movie_payload() -> dict:
         "external_rating": 7.5,
         "tmdb_id": 123456,
     }
+
+
+def _mark_as_seed(client: TestClient, movie_id: int) -> None:
+    """테스트 도우미 — 해당 영화를 시드 데이터로 표시한다."""
+    from app.database import get_session
+    from app.models import Movie
+
+    session_gen = client.app.dependency_overrides[get_session]()
+    session = next(session_gen)
+    try:
+        movie = session.get(Movie, movie_id)
+        movie.is_seed = True
+        session.commit()
+    finally:
+        session.close()

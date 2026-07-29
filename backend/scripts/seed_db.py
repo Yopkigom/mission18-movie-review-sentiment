@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import sqlite3
 import sys
 from datetime import date, datetime
 from pathlib import Path
@@ -18,6 +19,7 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(BASE_DIR))
 
 from app.config import settings  # noqa: E402
+
 from app.database import Base, SessionLocal, engine  # noqa: E402
 from app.ml.loader import load_model  # noqa: E402
 from app.ml.predictor import predict  # noqa: E402
@@ -25,6 +27,42 @@ from app.models import Movie, Review  # noqa: E402
 
 MOVIES_PATH = BASE_DIR / "data" / "movies_tmdb.json"
 REVIEWS_PATH = BASE_DIR / "data" / "reviews_seed.json"
+
+
+def db_path() -> Path:
+    """`sqlite:///...` URL에서 파일 경로만 뽑는다."""
+    return Path(settings.database_url.replace("sqlite:///", ""))
+
+
+def checkpoint() -> None:
+    """WAL 내용을 본 파일로 합치고 저널 모드를 되돌린다.
+
+    ⚠ 이 단계를 빠뜨리면 배포 이미지에 **옛 데이터가 들어간다.**
+    앱이 연결마다 `PRAGMA journal_mode=WAL`을 걸기 때문에 최근 커밋이
+    `movies.db-wal`에만 남는데, `.dockerignore`가 그 파일을 제외하므로
+    `movies.db` 하나만 복사되면 변경분이 통째로 사라진다.
+
+    저널 모드 전환에는 배타적 잠금이 필요해 **다른 연결이 모두 닫힌 뒤**
+    전용 연결로 수행한다.
+    """
+    engine.dispose()
+
+    path = db_path()
+    conn = sqlite3.connect(path)
+    try:
+        conn.execute("PRAGMA wal_checkpoint(TRUNCATE)")
+        # delete 모드로 되돌려 단일 파일로 완결되게 만든다.
+        # 런타임에는 database.py가 다시 WAL로 전환한다
+        mode = conn.execute("PRAGMA journal_mode=DELETE").fetchone()[0]
+        conn.commit()
+    finally:
+        conn.close()
+
+    leftovers = [p.name for p in path.parent.glob(f"{path.name}-*")]
+    if leftovers:
+        print(f"경고: 저널 파일이 남아 있습니다 → {leftovers}", file=sys.stderr)
+    else:
+        print(f"WAL 체크포인트 완료 (journal_mode={mode}) — DB가 단일 파일로 완결됐다")
 
 
 def main() -> int:
@@ -69,6 +107,8 @@ def main() -> int:
                 genre=item.get("genre"),
                 poster_url=item.get("poster_url"),
                 external_rating=item.get("external_rating"),
+                # 공개 배포본에서 삭제를 막을 대상이다(PROTECT_SEED)
+                is_seed=True,
             )
             session.add(movie)
             session.flush()
@@ -105,14 +145,17 @@ def main() -> int:
 
         session.commit()
         print(f"리뷰 {analyzed + failed}건 적재 (감성 분석 성공 {analyzed} / 실패 {failed})")
-        print(f"DB → {settings.database_url}")
-        return 0
 
     except Exception:
         session.rollback()
         raise
     finally:
         session.close()
+
+    # 세션이 닫힌 뒤에 수행한다 — 저널 모드 전환에는 배타적 잠금이 필요하다
+    checkpoint()
+    print(f"DB → {settings.database_url}")
+    return 0
 
 
 if __name__ == "__main__":

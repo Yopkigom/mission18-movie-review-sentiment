@@ -4,6 +4,7 @@ from __future__ import annotations
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
+from .. import config
 from ..models import Movie
 from ..repositories import movie_repo
 from ..schemas import MovieCreate, MovieDetail, MovieRating, MovieSummary
@@ -15,6 +16,15 @@ class MovieNotFoundError(Exception):
 
 class DuplicateMovieError(Exception):
     """tmdb_id 또는 (제목, 개봉일) 중복."""
+
+
+class SeedProtectedError(Exception):
+    """공개 배포본에서 시드 데이터를 지우려 한 경우."""
+
+
+def is_deletable(movie: Movie) -> bool:
+    """삭제 가능 여부. 설정을 매번 읽어 테스트에서 교체할 수 있게 한다."""
+    return not (config.settings.protect_seed and movie.is_seed)
 
 
 def _to_summary(row) -> MovieSummary:
@@ -43,6 +53,9 @@ def _to_detail(row) -> MovieDetail:
         genre=movie.genre,
         external_rating=movie.external_rating,
         tmdb_id=movie.tmdb_id,
+        is_seed=bool(movie.is_seed),
+        # 화면이 삭제 가능 여부를 스스로 판단하지 않게 서버가 계산해 내려준다
+        deletable=is_deletable(movie),
     )
 
 
@@ -100,9 +113,16 @@ def create_movie(session: Session, payload: MovieCreate) -> MovieDetail:
         genre=movie.genre,
         external_rating=movie.external_rating,
         tmdb_id=movie.tmdb_id,
+        is_seed=False,
+        deletable=True,
     )
 
 
 def delete_movie(session: Session, movie_id: int) -> None:
+    movie = session.get(Movie, movie_id)
+    if movie is None:
+        raise MovieNotFoundError(movie_id)
+    if not is_deletable(movie):
+        raise SeedProtectedError(movie_id)
     if not movie_repo.delete_movie(session, movie_id):
         raise MovieNotFoundError(movie_id)

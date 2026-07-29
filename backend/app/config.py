@@ -18,12 +18,22 @@ def _env_path(name: str, default: str) -> Path:
     return value if value.is_absolute() else (BASE_DIR / value).resolve()
 
 
+def _env_flag(name: str, default: bool = False) -> bool:
+    raw = os.getenv(name)
+    if raw is None:
+        return default
+    return raw.strip().lower() in {"1", "true", "yes", "on"}
+
+
 @dataclass(frozen=True)
 class Settings:
     database_url: str = ""
     ml_assets_dir: Path = field(default_factory=lambda: BASE_DIR / "ml_assets")
     model_version: str = "mission13-modelA-full-ft"
     allowed_origins: tuple[str, ...] = ("*",)
+    # 공개 배포본에서만 켠다. 누구나 접근할 수 있는 데모의 시드 데이터가
+    # 삭제되면 심사 중에 화면이 비어 버린다. 로컬 실행은 제한하지 않는다
+    protect_seed: bool = False
 
 
 def load_settings() -> Settings:
@@ -36,6 +46,7 @@ def load_settings() -> Settings:
         ml_assets_dir=_env_path("ML_ASSETS_DIR", "ml_assets"),
         model_version=os.getenv("MODEL_VERSION", "mission13-modelA-full-ft"),
         allowed_origins=tuple(o.strip() for o in origins.split(",") if o.strip()),
+        protect_seed=_env_flag("PROTECT_SEED", default=False),
     )
 
 

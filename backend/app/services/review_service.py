@@ -11,6 +11,7 @@ from ..ml.predictor import predict
 from ..models import Movie, Review
 from ..repositories import review_repo
 from ..schemas import ReviewCreate, ReviewOut
+from . import movie_service
 
 logger = logging.getLogger(__name__)
 
@@ -73,5 +74,12 @@ def create_review(
 
 
 def delete_review(session: Session, review_id: int) -> None:
+    review = session.get(Review, review_id)
+    if review is None:
+        raise ReviewNotFoundError(review_id)
+    # 시드 영화에 달린 리뷰도 시드 데이터다. 영화만 막으면 리뷰를 하나씩 지워
+    # 같은 결과를 만들 수 있다
+    if not movie_service.is_deletable(review.movie):
+        raise movie_service.SeedProtectedError(review_id)
     if not review_repo.delete_review(session, review_id):
         raise ReviewNotFoundError(review_id)

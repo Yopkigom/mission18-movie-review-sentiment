@@ -57,6 +57,14 @@ class MovieDetail(MovieSummary):
     genre: str | None = None
     external_rating: float | None = Field(default=None, description="TMDB 평점 (0~10)")
     tmdb_id: int | None = None
+    is_seed: bool = Field(default=False, description="시드 적재로 들어온 데모 데이터인지")
+    deletable: bool = Field(
+        default=True,
+        description=(
+            "삭제 가능 여부. 공개 배포본은 시드 데이터 삭제를 막는다(`PROTECT_SEED`). "
+            "로컬 실행에서는 항상 true다."
+        ),
+    )
 
 
 class MovieRating(BaseModel):

@@ -4,6 +4,7 @@ from __future__ import annotations
 from datetime import date, datetime
 
 from sqlalchemy import (
+    Boolean,
     Date,
     DateTime,
     Float,
@@ -13,6 +14,7 @@ from sqlalchemy import (
     String,
     Text,
     UniqueConstraint,
+    text,
 )
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -37,6 +39,10 @@ class Movie(Base):
     poster_url: Mapped[str | None] = mapped_column(Text)
     # TMDB vote_average(0~10). 감성 평점과 출처·범위가 다른 별개 필드다
     external_rating: Mapped[float | None] = mapped_column(Float)
+    # 시드 적재로 들어온 데이터인지 표시한다. 공개 배포본에서 이 데이터의 삭제를
+    # 막아 데모가 비는 것을 방지한다(PROTECT_SEED). 로컬에서는 제한하지 않는다
+    is_seed: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False,
+                                          server_default=text("0"))
 
     reviews: Mapped[list["Review"]] = relationship(
         back_populates="movie", cascade="all, delete-orphan", passive_deletes=True

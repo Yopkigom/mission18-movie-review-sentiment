@@ -7,7 +7,7 @@ from sqlalchemy.orm import Session
 from ..database import get_session
 from ..ml.loader import ModelBundle
 from ..schemas import ErrorResponse, Page, ReviewCreate, ReviewOut
-from ..services import review_service
+from ..services import movie_service, review_service
 
 router = APIRouter(prefix="/reviews", tags=["reviews"])
 
@@ -67,8 +67,15 @@ def list_reviews(
     "/{review_id}",
     status_code=status.HTTP_204_NO_CONTENT,
     summary="리뷰 삭제",
-    description="리뷰 1건을 삭제한다. 해당 영화의 평균 평점은 다음 조회 시 자동으로 다시 집계된다.",
-    responses={404: {"model": ErrorResponse, "description": "존재하지 않는 리뷰"}},
+    description=(
+        "리뷰 1건을 삭제한다. 해당 영화의 평균 평점은 다음 조회 시 자동으로 다시 집계된다.\n\n"
+        "공개 배포본에서는 시드 영화에 달린 리뷰도 403으로 보호된다 — "
+        "영화 삭제만 막으면 리뷰를 하나씩 지워 같은 결과를 만들 수 있기 때문이다."
+    ),
+    responses={
+        403: {"model": ErrorResponse, "description": "보호된 시드 데이터"},
+        404: {"model": ErrorResponse, "description": "존재하지 않는 리뷰"},
+    },
 )
 def delete_review(review_id: int, session: Session = Depends(get_session)) -> Response:
     try:
@@ -77,5 +84,10 @@ def delete_review(review_id: int, session: Session = Depends(get_session)) -> Re
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"리뷰를 찾을 수 없습니다: id={review_id}",
+        ) from exc
+    except movie_service.SeedProtectedError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="데모 시드 데이터는 삭제할 수 없습니다.",
         ) from exc
     return Response(status_code=status.HTTP_204_NO_CONTENT)

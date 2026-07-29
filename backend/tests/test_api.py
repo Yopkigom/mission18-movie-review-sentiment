@@ -153,3 +153,47 @@ def test_openapi_documents_every_route(client):
         for method, operation in methods.items():
             assert operation.get("summary"), f"summary 누락: {method.upper()} {path}"
             assert operation.get("description"), f"description 누락: {method.upper()} {path}"
+
+
+def test_seed_protection_blocks_delete(client, movie_payload, monkeypatch):
+    """PROTECT_SEED가 켜지면 시드 데이터 삭제가 403으로 막힌다."""
+    import dataclasses
+
+    from app import config
+    from tests.conftest import _mark_as_seed
+
+    seed_id = _create_movie(client, movie_payload)
+    normal_id = _create_movie(
+        client, {**movie_payload, "title": "사용자 등록 영화", "tmdb_id": None}
+    )
+    # 시드 표시는 실제로는 seed_db.py가 한다
+    _mark_as_seed(client, seed_id)
+
+    monkeypatch.setattr(
+        config, "settings", dataclasses.replace(config.settings, protect_seed=True)
+    )
+
+    # 시드 영화는 막히고
+    assert client.delete(f"/movies/{seed_id}").status_code == 403
+    # 시드 영화의 리뷰도 막힌다 (하나씩 지워 같은 결과를 만들 수 없게)
+    review_id = client.post(
+        "/reviews", json={"movie_id": seed_id, "author": "익명", "content": "리뷰"}
+    ).json()["id"]
+    assert client.delete(f"/reviews/{review_id}").status_code == 403
+
+    # 직접 등록한 영화는 그대로 삭제된다 — 필수 기능은 배포본에서도 시연 가능하다
+    assert client.delete(f"/movies/{normal_id}").status_code == 204
+
+    # 조회 응답이 삭제 가능 여부를 함께 알려준다
+    assert client.get(f"/movies/{seed_id}").json()["deletable"] is False
+
+
+def test_seed_deletable_when_protection_off(client, movie_payload):
+    """로컬 실행(기본값)에서는 시드도 삭제된다."""
+    from tests.conftest import _mark_as_seed
+
+    movie_id = _create_movie(client, movie_payload)
+    _mark_as_seed(client, movie_id)
+
+    assert client.get(f"/movies/{movie_id}").json()["deletable"] is True
+    assert client.delete(f"/movies/{movie_id}").status_code == 204
