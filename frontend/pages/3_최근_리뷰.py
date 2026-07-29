@@ -10,6 +10,9 @@ import streamlit as st
 from lib import api_client, components
 from lib.formatting import SENTIMENT_DISPLAY, format_datetime, is_uncertain, truncate
 
+# 제목이 붙으면 버튼이 길어진다. 한 줄에 4개까지만 둔다
+GOTO_COLUMNS = 4
+
 components.page_setup("최근 리뷰 10개")
 
 try:
@@ -51,10 +54,21 @@ st.caption("⚠ 는 확신도가 낮아 판정이 애매한 예측입니다.")
 
 st.divider()
 st.markdown("##### 영화 상세로 이동")
+
+# 표의 `영화 ID`만으로는 어떤 영화인지 알 수 없다. 제목을 함께 붙인다.
+# 조회에 실패해도 이동 자체는 막지 않는다 — ID 표기로 물러선다
+try:
+    titles = {m["id"]: m["title"] for m in api_client.list_movies(limit=100)["items"]}
+except api_client.ApiError:
+    titles = {}
+
 movie_ids = sorted({review["movie_id"] for review in reviews})
-columns = st.columns(min(len(movie_ids), 8))
-for column, movie_id in zip(columns, movie_ids):
-    with column:
-        if st.button(f"ID {movie_id}", key=f"goto_{movie_id}", width='stretch'):
-            # 페이지 전환은 query param을 비우므로 switch_page에 직접 넘겨야 한다
-            st.switch_page("app.py", query_params={"movie_id": str(movie_id)})
+for row_start in range(0, len(movie_ids), GOTO_COLUMNS):
+    columns = st.columns(GOTO_COLUMNS)
+    for column, movie_id in zip(columns, movie_ids[row_start:row_start + GOTO_COLUMNS]):
+        title = titles.get(movie_id)
+        with column:
+            label = f"ID {movie_id} · {title}" if title else f"ID {movie_id}"
+            if st.button(label, key=f"goto_{movie_id}", width='stretch'):
+                # 페이지 전환은 query param을 비우므로 switch_page에 직접 넘겨야 한다
+                st.switch_page("app.py", query_params={"movie_id": str(movie_id)})
