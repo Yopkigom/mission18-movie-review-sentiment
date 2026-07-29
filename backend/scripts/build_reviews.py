@@ -25,13 +25,13 @@ from app.config import settings  # noqa: E402
 from app.ml.loader import load_model  # noqa: E402
 from app.ml.predictor import predict  # noqa: E402
 
-NSMC_PATH = Path("/mnt/wsl_data/datasets/nsmc/ratings_test.txt")
+NSMC_PATH = Path("/mnt/wsl_data/datasets/nsmc/ratings_train.txt")
 MOVIES_PATH = BASE_DIR / "data" / "movies_tmdb.json"
 OUTPUT_PATH = BASE_DIR / "data" / "reviews_seed.json"
 
 SEED = 42
 REVIEWS_PER_MOVIE = 12        # 캡처 요건은 영화당 10건 이상
-POOL_SIZE = 8000              # 큐레이션용 후보 표본 크기
+POOL_SIZE = 30000            # 큐레이션용 후보 표본 크기
 MIN_LEN, MAX_LEN = 15, 140    # 너무 짧으면 판단 근거가 없고, NSMC 상한은 140자
 CONFIDENT = 0.90              # 확신 있는 예측 기준 (model-eval.md C-b 실측 근거)
 UNCERTAIN_MIN = 0.55          # 저확신 표본의 하한 — 이보다 낮으면 예측이 사실상 무작위다
@@ -55,6 +55,59 @@ PROFILES: dict[str, dict[str, int]] = {
 # 프로필에 없는 영화가 들어오면 균등 배분으로 처리한다
 DEFAULT_PROFILE = {"긍정": 5, "중립": 2, "부정": 3, "저확신": 2}
 BUCKETS = ("긍정", "중립", "부정", "저확신")
+
+
+# 리뷰-영화 대응이 임의 배정이므로, **어느 영화에 붙어도 어색하지 않은 리뷰**만 고른다.
+# 배우 이름이나 다른 작품이 언급된 리뷰가 섞이면 화면을 보는 사람이 먼저
+# "데이터가 깨졌나"로 읽는다. 명시해 두는 것만으로는 그 인상을 막지 못한다.
+
+# 일반적인 평가 어휘. 최소 하나는 있어야 리뷰로서 의미가 있다
+EVALUATIVE_WORDS = (
+    "재미", "재밌", "재미없", "연기", "연출", "스토리", "지루", "감동", "추천",
+    "최고", "별로", "실망", "명작", "졸작", "볼만", "아깝", "몰입", "전개",
+    "구성", "각본", "장면", "영상", "음악", "결말", "배우", "웃기", "감명",
+    "훌륭", "괜찮", "그저", "평범", "지겹", "훈훈", "탄탄", "어색", "지루함",
+)
+
+# 특정 작품·인물을 가리키는 신호. 하나라도 걸리면 제외한다
+SPECIFIC_PATTERNS = re.compile(
+    r"[A-Za-z]"                      # 영문 (CSI, TV, OST 등 외부 고유명사)
+    r"|[0-9]"                        # 숫자 (편수·연도·회차 언급)
+    r"|짱"                            # '한지민 짱' 류의 인물 호명
+    r"|[가-힣]{2,4}(?:님|씨|배우|감독|작가)"   # 인물 지칭
+    r"|원작|속편|시즌|드라마판|만화|소설|리메이크"  # 다른 매체·작품 언급
+    r"|주연|출연|캐스팅"                 # 특정 캐스팅 언급
+    r"|본방|방송|시청률|재방|종영|채널|회차|프로그램|다큐"  # TV 언급 (NSMC에는 드라마 평도 섞여 있다)
+    r"|애니메이션|애니"                  # 장르 언급 — 실사 영화에 붙으면 어긋난다
+    r"|중국|일본|홍콩|헐리|할리우드|외국영화"     # 제작국 언급 — 배정된 영화와 어긋난다
+    # 자주 등장해 빈도 필터를 통과하는 유명인 이름. 일반화할 수 없어 목록으로 둔다
+    r"|견자단|성룡|이연걸|주성치|장동건|송강호|하정우|마동석"
+)
+
+
+# 희귀 어절 판정 기준. 말뭉치 5만 건에서 이보다 드물게 나오는 어절은
+# 인명·작품명 같은 고유명사일 가능성이 높다(사이먼래틀 · 엄석대 · 하이바라 …).
+# 접미사 규칙만으로는 이런 이름을 걸러낼 수 없어 빈도 통계를 쓴다.
+MIN_DOC_FREQ = 40
+_TOKEN = re.compile(r"[가-힣]+")
+
+
+def build_document_freq(rows: list[dict]) -> Counter:
+    """어절 단위 문서 빈도. 형태소 분석기 없이 표준 라이브러리만 쓴다."""
+    freq: Counter = Counter()
+    for row in rows:
+        freq.update(set(_TOKEN.findall(row["document"])))
+    return freq
+
+
+def is_generic(text: str, doc_freq: Counter) -> bool:
+    """어느 영화에 붙여도 자연스러운 일반 평가문인지 판단한다."""
+    if SPECIFIC_PATTERNS.search(text):
+        return False
+    if not any(word in text for word in EVALUATIVE_WORDS):
+        return False
+    # 희귀 어절이 하나라도 있으면 특정 작품·인물을 가리킬 가능성이 크다
+    return all(doc_freq[token] >= MIN_DOC_FREQ for token in _TOKEN.findall(text))
 
 
 def load_nsmc(path: Path) -> list[dict]:
@@ -94,8 +147,21 @@ def build_pool(rows: list[dict], bundle, need: dict[str, int],
     저확신 버킷도 정답과 일치하는 것만 쓴다 — 표기 기능을 보이려는 것이지
     틀린 예측을 보이려는 것이 아니다.
     """
-    candidates = [r for r in rows if MIN_LEN <= len(r["document"]) <= MAX_LEN]
+    doc_freq = build_document_freq(rows)
+
+    # NSMC에는 같은 문장이 다른 id로 여러 번 들어 있다. 그대로 두면
+    # 동일한 리뷰가 서로 다른 영화에 배정돼 화면에서 눈에 띈다
+    seen: set[str] = set()
+    candidates = []
+    for r in rows:
+        text = r["document"]
+        if not (MIN_LEN <= len(text) <= MAX_LEN) or text in seen:
+            continue
+        if is_generic(text, doc_freq):
+            seen.add(text)
+            candidates.append(r)
     rng.shuffle(candidates)
+    print(f"일반 평가문 후보: {len(candidates):,}건 (전체 {len(rows):,}건 중)")
 
     buckets: dict[str, list[dict]] = {k: [] for k in BUCKETS}
 
