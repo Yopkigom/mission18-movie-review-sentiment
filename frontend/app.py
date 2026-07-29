@@ -13,6 +13,43 @@ from lib.formatting import rating_text, to_score_5
 REVIEW_PAGE_SIZE = 10
 GRID_COLUMNS = 4
 
+# 주소창에 마지막으로 반영한 영화 ID. 아래 _sync_url 참고
+URL_STATE_KEY = "_url_movie_id"
+# rerun 뒤에 띄울 알림 문구
+FLASH_KEY = "_flash_message"
+
+
+def _write_url(movie_id: int | None) -> None:
+    """현재 화면을 주소창에 반영한다. query param을 쓰는 유일한 지점이다."""
+    if movie_id is None:
+        st.query_params.clear()
+    else:
+        st.query_params["movie_id"] = str(movie_id)
+    st.session_state[URL_STATE_KEY] = movie_id
+
+
+def _navigate(movie_id: int | None) -> None:
+    """상세(id) 또는 목록(None)으로 이동한다."""
+    _write_url(movie_id)
+    st.rerun()
+
+
+def _sync_url(movie_id: int | None) -> None:
+    """주소창이 실제 화면과 어긋나 있으면 되돌린다.
+
+    사이드바 링크로 이 페이지에 돌아오면 Streamlit은 서버 쪽 query param만 비우고
+    브라우저 주소창의 `movie_id`는 남겨 둔다. 그대로 두면 다음 클릭이 그 값을
+    되살려, 목록에서 다른 영화를 눌러도 직전 영화의 상세가 다시 열린다.
+    (클릭이 목록 화면까지 도달하지 못하고 상세 분기에서 가로채인다.)
+
+    직접 쓴 값을 세션에 기억해 두고, 화면과 다를 때만 한 번 고쳐 쓴다.
+    매번 쓰면 브라우저 history에 같은 주소가 계속 쌓인다.
+    """
+    if st.session_state.get(URL_STATE_KEY, movie_id) == movie_id:
+        st.session_state[URL_STATE_KEY] = movie_id
+        return
+    _write_url(movie_id)
+
 
 def render_movie_list() -> None:
     st.subheader("영화 목록")
@@ -32,20 +69,21 @@ def render_movie_list() -> None:
         columns = st.columns(GRID_COLUMNS)
         for column, movie in zip(columns, movies[row_start:row_start + GRID_COLUMNS]):
             with column:
-                components.movie_card(movie)
+                if components.movie_card(movie):
+                    _navigate(movie["id"])
 
 
 def render_movie_detail(movie_id: int) -> None:
     if st.button("← 목록으로"):
-        st.query_params.clear()
-        st.rerun()
+        _navigate(None)
 
     try:
         movie = api_client.get_movie(movie_id)
     except api_client.ApiError as error:
         components.show_error(error)
         if error.status_code == 404:
-            st.query_params.clear()
+            # 없는 영화를 가리키는 주소는 지운다. 오류 문구는 남겨 둔다
+            _write_url(None)
         return
 
     poster_col, info_col = st.columns([1, 3])
@@ -132,24 +170,31 @@ def _render_danger_zone(movie_id: int, review_count: int, deletable: bool) -> No
             components.show_error(error)
             return
         api_client.clear_cache()
-        st.query_params.clear()
-        st.success("영화를 삭제했습니다.")
-        st.rerun()
+        # 알림은 다음 실행에서 띄운다. 지금 띄우면 곧바로 이어지는 rerun에 지워진다
+        st.session_state[FLASH_KEY] = "영화를 삭제했습니다."
+        _navigate(None)
 
 
 def main() -> None:
     components.page_setup("영화 리뷰 감성 분석")
 
-    raw_id = st.query_params.get("movie_id")
-    if raw_id is None:
-        render_movie_list()
-        return
+    flash = st.session_state.pop(FLASH_KEY, None)
+    if flash:
+        st.toast(flash)
 
-    try:
-        movie_id = int(raw_id)
-    except (TypeError, ValueError):
-        st.warning("잘못된 영화 ID입니다.")
-        st.query_params.clear()
+    raw_id = st.query_params.get("movie_id")
+
+    movie_id: int | None = None
+    if raw_id is not None:
+        try:
+            movie_id = int(raw_id)
+        except (TypeError, ValueError):
+            st.warning("잘못된 영화 ID입니다.")
+            _write_url(None)
+
+    _sync_url(movie_id)
+
+    if movie_id is None:
         render_movie_list()
         return
 

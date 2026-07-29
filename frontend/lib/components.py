@@ -62,14 +62,15 @@ def poster(url: str | None) -> None:
         st.markdown(_PLACEHOLDER, unsafe_allow_html=True)
 
 
-def movie_card(movie: dict) -> None:
-    """목록 카드. 카드 전체가 상세 화면 진입점이다."""
+def movie_card(movie: dict) -> bool:
+    """목록 카드. 눌렸는지만 돌려주고 화면 전환은 호출 측이 맡는다.
+
+    URL(query param)을 쓰는 지점을 app.py 한 곳으로 모으기 위한 분리다.
+    """
     poster(movie.get("poster_url"))
     st.markdown(f"**{movie['title']}**")
     st.caption(rating_text(movie.get("sentiment_rating"), movie.get("review_count", 0)))
-    if st.button("상세 보기", key=f"movie_{movie['id']}", width='stretch'):
-        st.query_params["movie_id"] = str(movie["id"])
-        st.rerun()
+    return st.button("상세 보기", key=f"movie_{movie['id']}", width='stretch')
 
 
 def review_card(review: dict) -> None:

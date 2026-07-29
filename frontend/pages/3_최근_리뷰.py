@@ -56,5 +56,5 @@ columns = st.columns(min(len(movie_ids), 8))
 for column, movie_id in zip(columns, movie_ids):
     with column:
         if st.button(f"ID {movie_id}", key=f"goto_{movie_id}", width='stretch'):
-            st.query_params["movie_id"] = str(movie_id)
-            st.switch_page("app.py")
+            # 페이지 전환은 query param을 비우므로 switch_page에 직접 넘겨야 한다
+            st.switch_page("app.py", query_params={"movie_id": str(movie_id)})
