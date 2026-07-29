@@ -2,7 +2,6 @@
 from __future__ import annotations
 
 import logging
-from datetime import datetime
 
 from sqlalchemy.orm import Session
 
@@ -11,6 +10,7 @@ from ..ml.predictor import predict
 from ..models import Movie, Review
 from ..repositories import review_repo
 from ..schemas import ReviewCreate, ReviewOut
+from ..timeutil import utc_now
 from . import movie_service
 
 logger = logging.getLogger(__name__)
@@ -54,7 +54,7 @@ def create_review(
         author=payload.author,
         title=payload.title,
         content=payload.content,
-        created_at=datetime.now(),
+        created_at=utc_now(),
     )
 
     if bundle is None:

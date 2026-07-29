@@ -1,6 +1,8 @@
 """엔드포인트별 상태 코드 · 페이지네이션 경계 · 삭제 연쇄 검증 (G-c)."""
 from __future__ import annotations
 
+from datetime import datetime, timezone
+
 
 def _create_movie(client, payload: dict) -> int:
     response = client.post("/movies", json=payload)
@@ -113,6 +115,20 @@ def test_recent_reviews_default_limit_is_10(client, movie_payload):
 
     body = client.get("/reviews").json()
     assert len(body["items"]) == 10 and body["total"] == 12
+
+
+def test_review_created_at_is_utc(client, movie_payload):
+    """등록 시각이 컨테이너 TZ를 타면 로컬(KST) 시드와 9시간 어긋나 최신순이 뒤집힌다."""
+    movie_id = _create_movie(client, movie_payload)
+    before = datetime.now(timezone.utc)
+    body = client.post(
+        "/reviews", json={"movie_id": movie_id, "author": "익명", "content": "리뷰"}
+    ).json()
+
+    created = datetime.fromisoformat(body["created_at"])
+    # 응답은 오프셋을 달고 나간다. 소비 측이 로컬 시각으로 오해하지 않도록
+    assert created.tzinfo is not None
+    assert abs((created - before).total_seconds()) < 60
 
 
 def test_delete_movie_cascades_reviews(client, movie_payload):

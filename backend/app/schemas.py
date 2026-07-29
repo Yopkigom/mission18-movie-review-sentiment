@@ -1,10 +1,10 @@
 """Pydantic 스키마. API 계약(docs/plan/implementation.md C-b)의 구현이다."""
 from __future__ import annotations
 
-from datetime import date, datetime
+from datetime import date, datetime, timezone
 from typing import Generic, TypeVar
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_serializer
 
 T = TypeVar("T")
 
@@ -101,13 +101,19 @@ class ReviewOut(BaseModel):
     author: str
     title: str | None = None
     content: str
-    created_at: datetime
+    created_at: datetime = Field(description="등록 시각 (UTC). 지역 시각 변환은 표시 측에서 한다")
     sentiment_label: str | None = Field(default=None, description="부정 · 중립 · 긍정")
     sentiment_score: int | None = Field(default=None, description="-1 · 0 · +1")
     confidence: float | None = Field(default=None, description="max(softmax). 표기 전용")
     model_version: str | None = None
 
     model_config = ConfigDict(from_attributes=True)
+
+    @field_serializer("created_at")
+    def _created_at_as_utc(self, value: datetime) -> str:
+        """DB에는 naive UTC로 들어 있다. 소비 측이 로컬 시각으로 오해하지 않도록
+        오프셋을 붙여 내보낸다."""
+        return value.replace(tzinfo=timezone.utc).isoformat()
 
 
 class SentimentRequest(BaseModel):

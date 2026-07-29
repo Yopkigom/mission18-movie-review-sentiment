@@ -15,7 +15,7 @@ import random
 import re
 import sys
 from collections import Counter
-from datetime import datetime, timedelta
+from datetime import timedelta
 from pathlib import Path
 
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -24,6 +24,7 @@ sys.path.insert(0, str(BASE_DIR))
 from app.config import settings  # noqa: E402
 from app.ml.loader import load_model  # noqa: E402
 from app.ml.predictor import predict  # noqa: E402
+from app.timeutil import utc_now  # noqa: E402
 
 NSMC_PATH = Path("/mnt/wsl_data/datasets/nsmc/ratings_train.txt")
 MOVIES_PATH = BASE_DIR / "data" / "movies_tmdb.json"
@@ -218,7 +219,9 @@ def main() -> int:
             print(f"경고: {label} 후보 부족 ({len(buckets[label])}/{count}건) — "
                   "POOL_SIZE를 늘리거나 프로필을 조정하세요.", file=sys.stderr)
 
-    now = datetime.now().replace(microsecond=0)
+    # 저장 시각은 UTC 기준이다. 로컬 TZ로 만들면 배포 환경(UTC)에서 등록한
+    # 리뷰와 9시간 어긋나 최신순 정렬이 뒤집힌다
+    now = utc_now().replace(microsecond=0)
     reviews: list[dict] = []
     cursor = {k: 0 for k in BUCKETS}
     author_no = 1

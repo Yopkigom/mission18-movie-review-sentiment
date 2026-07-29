@@ -4,11 +4,14 @@
 """
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 
 # `판정 애매` 임계값. model-eval.md C-b 실측 근거:
 # confidence 0.90 미만 구간은 엄격 정확도가 0.5를 밑돌고 중립 예측이 40~55%를 차지한다
 CONFIDENCE_THRESHOLD = 0.90
+
+# 표시용 시간대. 백엔드 저장 기준은 UTC다
+KST = timezone(timedelta(hours=9))
 
 # 감성 라벨 → 화면 표기 · 색
 SENTIMENT_DISPLAY = {
@@ -70,7 +73,17 @@ def truncate(text: str, length: int = 40) -> str:
 
 
 def format_datetime(value: str, fmt: str = "%Y-%m-%d %H:%M") -> str:
+    """백엔드가 주는 UTC 시각을 한국 시각으로 바꿔 표시한다.
+
+    오프셋이 없는 값도 UTC로 해석한다 — 백엔드는 저장·응답 모두 UTC로 통일돼 있다.
+    ZoneInfo 대신 고정 오프셋을 쓴다. KST는 서머타임이 없고, 배포 이미지에
+    tzdata가 없어도 동작해야 한다.
+    """
     try:
-        return datetime.fromisoformat(value).strftime(fmt)
+        parsed = datetime.fromisoformat(value)
     except (TypeError, ValueError):
         return str(value)
+
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=timezone.utc)
+    return parsed.astimezone(KST).strftime(fmt)
