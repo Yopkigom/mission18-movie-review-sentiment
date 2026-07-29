@@ -23,13 +23,25 @@ class ApiError(Exception):
         self.status_code = status_code
 
 
+DEFAULT_BASE_URL = "http://localhost:8000"
+
+
 def base_url() -> str:
     """st.secrets → 환경변수 순으로 읽는다. 하드코딩하지 않는다."""
     try:
         value = st.secrets["BACKEND_BASE_URL"]
     except Exception:
-        value = os.getenv("BACKEND_BASE_URL", "http://localhost:8000")
+        value = os.getenv("BACKEND_BASE_URL", DEFAULT_BASE_URL)
     return str(value).rstrip("/")
+
+
+def is_using_default_base_url() -> bool:
+    """설정 주입 없이 기본값을 쓰고 있는지 확인한다.
+
+    배포 환경에서 이 값이 True면 Secrets 설정이 누락된 것이다.
+    원인을 화면에 드러내지 않으면 '서버가 죽었나'로 오진하기 쉽다.
+    """
+    return base_url() == DEFAULT_BASE_URL
 
 
 def _request(method: str, path: str, **kwargs) -> Any:
@@ -37,9 +49,19 @@ def _request(method: str, path: str, **kwargs) -> Any:
     try:
         response = requests.request(method, url, timeout=TIMEOUT_SEC, **kwargs)
     except requests.Timeout as exc:
-        raise ApiError("백엔드 응답이 지연되고 있습니다. 잠시 후 다시 시도해 주세요. (연결 시간 초과)") from exc
+        raise ApiError(
+            "백엔드 응답이 지연되고 있습니다. 잠시 후 다시 시도해 주세요. (연결 시간 초과)\n\n"
+            f"요청 대상: {base_url()}"
+        ) from exc
     except requests.ConnectionError as exc:
-        raise ApiError("백엔드에 연결할 수 없습니다. 서버가 실행 중인지 확인해 주세요.") from exc
+        # 어디로 요청했는지 함께 알린다. 주소가 틀린 것과 서버가 죽은 것은 대응이 다르다
+        message = f"백엔드에 연결할 수 없습니다.\n\n요청 대상: {base_url()}"
+        if is_using_default_base_url():
+            message += (
+                "\n\n`BACKEND_BASE_URL`이 설정되지 않아 기본값(로컬 주소)으로 요청했습니다. "
+                "배포 환경이라면 Streamlit Secrets에 백엔드 주소를 넣어야 합니다."
+            )
+        raise ApiError(message) from exc
     except requests.RequestException as exc:
         raise ApiError(f"요청 처리 중 오류가 발생했습니다: {exc}") from exc
 
