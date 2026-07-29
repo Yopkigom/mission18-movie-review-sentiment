@@ -13,6 +13,9 @@ _PLACEHOLDER = (
     "color:#5f6368;font-size:0.85rem;padding:8px;'>이미지<br/>없음</div>"
 )
 
+# 직전 실행이 어느 화면이었는지 기억한다. 화면 진입 감지에만 쓴다
+_CURRENT_PAGE_KEY = "_current_page"
+
 TMDB_NOTICE = (
     "이 서비스는 TMDB API를 사용하지만 TMDB가 보증하지 않습니다.\n\n"
     "리뷰는 NSMC 공개 데이터셋에서 가져와 영화에 **임의 배정**한 것으로, "
@@ -20,10 +23,18 @@ TMDB_NOTICE = (
 )
 
 
-def page_setup(title: str) -> None:
+def page_setup(title: str) -> bool:
+    """공통 셋업. 다른 화면에서 막 들어온 실행이면 True를 돌려준다.
+
+    세션 상태는 화면을 옮겨도 남는다. 직전 화면에서 만든 일회성 결과(등록 결과 등)를
+    새로 들어온 화면에 그대로 띄우지 않으려면 진입 시점을 구분해야 한다.
+    """
     st.set_page_config(page_title="영화 리뷰 감성 분석", page_icon="🎬", layout="wide")
+    entered = st.session_state.get(_CURRENT_PAGE_KEY) != title
+    st.session_state[_CURRENT_PAGE_KEY] = title
     render_sidebar()
     st.title(title)
+    return entered
 
 
 def render_sidebar() -> None:

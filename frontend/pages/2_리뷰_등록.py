@@ -9,7 +9,9 @@ import streamlit as st
 from lib import api_client, components
 from lib.formatting import badge_html, is_uncertain
 
-components.page_setup("리뷰 등록")
+if components.page_setup("리뷰 등록"):
+    # 지난 등록 결과가 새로 들어온 화면에 남아 있으면 방금 등록한 것으로 오해한다
+    st.session_state.pop("last_review", None)
 
 try:
     movies = api_client.list_movies(limit=100, offset=0)["items"]
