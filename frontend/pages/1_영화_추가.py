@@ -58,4 +58,4 @@ if submitted:
             # 방금 등록한 영화가 목록에 없으면 저장 실패로 오해한다
             api_client.clear_cache()
             st.success(f"'{movie['title']}'을(를) 등록했습니다.")
-            st.page_link("app.py", label="영화 목록으로 이동", icon="🎬")
+            st.page_link("app.py", label="영화 목록으로 이동")

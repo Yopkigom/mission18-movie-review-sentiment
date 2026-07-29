@@ -28,7 +28,7 @@ def page_setup(title: str) -> None:
 
 def render_sidebar() -> None:
     with st.sidebar:
-        st.markdown("### 🎬 영화 리뷰 감성 분석")
+        st.markdown("### 영화 리뷰 감성 분석")
         st.page_link("app.py", label="영화 목록")
         st.page_link("pages/1_영화_추가.py", label="영화 추가")
         st.page_link("pages/2_리뷰_등록.py", label="리뷰 등록")

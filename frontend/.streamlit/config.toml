@@ -1,6 +1,10 @@
 [theme]
 base = "light"
 
+[client]
+# pages/ 자동 네비게이션을 끈다. 사이드바에 직접 구성한 메뉴와 중복되기 때문이다
+showSidebarNavigation = false
+
 [server]
 headless = true
 

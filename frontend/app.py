@@ -127,7 +127,7 @@ def _render_danger_zone(movie_id: int, review_count: int) -> None:
 
 
 def main() -> None:
-    components.page_setup("🎬 영화 리뷰 감성 분석")
+    components.page_setup("영화 리뷰 감성 분석")
 
     raw_id = st.query_params.get("movie_id")
     if raw_id is None:

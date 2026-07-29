@@ -81,4 +81,4 @@ if review:
                     st.caption("확신도가 낮아 판정이 애매합니다. 모델 판단은 그대로 표시합니다.")
             st.write(f"이 리뷰는 **{labels.get(review['movie_id'], '해당 영화')}**의 평점에 반영되었습니다.")
 
-        st.page_link("app.py", label="영화 목록으로 이동", icon="🎬")
+        st.page_link("app.py", label="영화 목록으로 이동")
