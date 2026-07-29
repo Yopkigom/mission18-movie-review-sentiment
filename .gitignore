@@ -1,0 +1,15 @@
+__pycache__/
+*.pyc
+.pytest_cache/
+.env
+.env.*
+!.env.example
+frontend/.streamlit/secrets.toml
+
+# 중간 산출물 · 저널 파일은 제외한다
+backend/data/*.json
+backend/data/*.db-wal
+backend/data/*.db-shm
+
+# 시드 DB는 배포 이미지에 굽는 산출물이므로 의도적으로 추적한다
+!backend/data/movies.db
