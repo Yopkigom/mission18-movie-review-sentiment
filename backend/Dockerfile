@@ -18,5 +18,6 @@ COPY data/movies.db ./data/movies.db
 
 EXPOSE 8080
 
-# 워커 1개. 모델을 프로세스마다 로드하면 메모리 예산을 넘긴다
-CMD exec uvicorn app.main:app --host 0.0.0.0 --port ${PORT} --workers 1
+# 워커 1개. 모델을 프로세스마다 로드하면 메모리 예산을 넘긴다.
+# PORT 확장을 위해 sh -c를 쓰되 exec로 PID 1을 넘겨 신호가 정상 전달되게 한다
+CMD ["sh", "-c", "exec uvicorn app.main:app --host 0.0.0.0 --port ${PORT} --workers 1"]

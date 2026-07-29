@@ -65,7 +65,7 @@ def render_movie_detail(movie_id: int) -> None:
         )
         external = movie.get("external_rating")
         st.markdown(
-            f"**TMDB 평점** {external} / 10" if external is not None
+            f"**TMDB 평점** {external:.1f} / 10" if external is not None
             else "**TMDB 평점** 정보 없음"
         )
 
